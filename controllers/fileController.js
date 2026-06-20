@@ -1,8 +1,12 @@
 const exress = require("express");
 const path = require("path");
-const crypto = require("crypto");
 const fs = require("fs");
+const createFileChecksum = require("../helpers/fileChecksum.js");
 const File = require("../models/File.js");
+const {
+    uploadImage,
+    getAssetInfo
+} = require("../helpers/cloudinary.js");
 const addSingleFile = async (req, res) => {
     try {
         if(!req.file) {
@@ -12,13 +16,10 @@ const addSingleFile = async (req, res) => {
             });
         }
         // Generate SHA-256 Checksum from file buffer
-        const fileBuffer = fs.readFileSync(req.file.path);
-        const checksum = crypto
-            .createHash('sha256')
-            .update(fileBuffer)
-            .digest('hex');
+        const fileChecksum = createFileChecksum(req.file.path);
+
         // Check if the file already exists in the database
-        const existingFile = await File.findOne({ checksum });
+        const existingFile = await File.findOne({ checksum: fileChecksum });
         if (existingFile) {
             fs.unlinkSync(req.file.path);
             return res.status(409).json({
@@ -27,6 +28,10 @@ const addSingleFile = async (req, res) => {
                 id: existingFile._id
             });
         }
+        // upload file in cloudinary
+        const { publicId, resourceType } = await uploadImage(req.file.path, req.file.mimetype);
+        // get file from cloudinary
+        const getFileDetailsByPublicId = await getAssetInfo(publicId, resourceType);
         // create new file data
         const newFile = await File.create({
             originalFileName: path.parse(req.file.originalname).name,
@@ -36,8 +41,10 @@ const addSingleFile = async (req, res) => {
             fieldName: req.file.fieldname,
             fileMimeType: req.file.mimetype,
             fileSize: req.file.size,
-            fileUrl: `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`,
-            checksum: checksum,
+            // fileUrl: `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`,
+            fileUrl: getFileDetailsByPublicId,
+            checksum: fileChecksum,
+            // checksum: Math.random(),
             tags: req.body.tags
         });
         await newFile.save();

@@ -20,7 +20,7 @@ app.get("/", (req, res) => {
     console.log("Hello World");
     res.status(200).json({
         msg: "Hello World"
-    })
+    });
 });
 app.listen(PORT, () => {
     console.log(`Server is running at port ${PORT}`);
